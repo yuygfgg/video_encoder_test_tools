@@ -640,22 +640,61 @@ class tester:
             self.bdrate()
 
     def bdrate(self):
+        def prepare_data(rate, score):
+            pairs = sorted(zip(rate, score), key=lambda x: x[0])
+            seen = set()
+            unique_pairs = []
+            for r, s in pairs:
+                if r not in seen:
+                    seen.add(r)
+                    unique_pairs.append((r, s))
+            if not unique_pairs:
+                return [], []
+            return map(list, zip(*unique_pairs))
+
         ref_rate, ref_vmaf = self.refdata["rate"], self.refdata["vmaf"]
         vmaf_tab = utils.vmaf_model_list[self.vmaf_model]
+        
         for r in self.result:
-            test_rate, test_vmaf = (
-                [i["bitrate"] for i in r["data"]],
-                [i[vmaf_tab] for i in r["data"]],
-            )
-            r["bdrate-vmaf"] = bd.bd_rate(
-                ref_rate, ref_vmaf, test_rate, test_vmaf, method="akima"
-            )
-            for i in self.extra_metrics:
-                ref_exscore = self.refdata[i]
-                test_exscore = [j[i] for j in r["data"]]
-                r[f"bdrate-{i}"] = bd.bd_rate(
-                    ref_rate, ref_exscore, test_rate, test_exscore, method="akima"
+            r["bdrate-vmaf"] = "calculation failed"
+            for metric in self.extra_metrics:
+                r[f"bdrate-{metric}"] = "calculation failed"
+
+            test_rate = [i["bitrate"] for i in r["data"]]
+            test_vmaf = [i[vmaf_tab] for i in r["data"]]
+            
+            try:
+                ref_rate_clean, ref_vmaf_clean = prepare_data(ref_rate, ref_vmaf)
+                test_rate_clean, test_vmaf_clean = prepare_data(test_rate, test_vmaf)
+                
+                if len(ref_rate_clean) < 4 or len(test_rate_clean) < 4:
+                    r["bdrate-vmaf"] = "insufficient data"
+                    continue
+                    
+                r["bdrate-vmaf"] = bd.bd_rate(
+                    ref_rate_clean, ref_vmaf_clean,
+                    test_rate_clean, test_vmaf_clean,
+                    method="akima"
                 )
+                
+                for i in self.extra_metrics:
+                    ref_exscore = self.refdata[i]
+                    test_exscore = [j[i] for j in r["data"]]
+                    
+                    ref_rate_clean, ref_score_clean = prepare_data(ref_rate, ref_exscore)
+                    test_rate_clean, test_score_clean = prepare_data(test_rate, test_exscore)
+                    
+                    if len(ref_rate_clean) < 4 or len(test_rate_clean) < 4:
+                        r[f"bdrate-{i}"] = "insufficient data"
+                        continue
+                        
+                    r[f"bdrate-{i}"] = bd.bd_rate(
+                        ref_rate_clean, ref_score_clean,
+                        test_rate_clean, test_score_clean,
+                        method="akima"
+                    )
+            except Exception as e:
+                print(f"BD-rate calculation failed for {r['test']}: {str(e)}")
 
     def report(self):
         for r in self.result:
@@ -667,9 +706,17 @@ class tester:
         report = htmlreport(html)
         for r in self.result:
             vmaf_tab = utils.vmaf_model_list[self.vmaf_model]
-            bdrates = f'vmaf: {r["bdrate-vmaf"]:.02f}%'
+            
+            bdrate_vmaf = r["bdrate-vmaf"]
+            bdrates = f'vmaf: {bdrate_vmaf:.02f}%' if isinstance(bdrate_vmaf, (float, int)) else f'vmaf: {bdrate_vmaf}'
+            
             for i in self.extra_metrics:
-                bdrates += f'<br />{i}: {r[f"bdrate-{i}"]:.02f}%'
+                bdrate_val = r[f"bdrate-{i}"]
+                if isinstance(bdrate_val, (float, int)):
+                    bdrates += f'<br />{i}: {bdrate_val:.02f}%'
+                else:
+                    bdrates += f'<br />{i}: {bdrate_val}'
+
             report.addtable(
                 r["test"],
                 r["data"],
@@ -694,8 +741,7 @@ class tester:
                 exclass=["extra2"] if self.skipbdrate else ["extra", "extra2"],
             )
 
-        report.save("report.html")
-
+            report.save("report.html")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Video encoder testing tool')
