@@ -783,6 +783,7 @@ if __name__ == "__main__":
     
     if args.values is not None:
         processed_values = []
+        seen = set()
         for val in args.values:
             try:
                 processed_val = int(val)
@@ -791,9 +792,11 @@ if __name__ == "__main__":
                     processed_val = float(val)
                 except ValueError:
                     processed_val = val
-            processed_values.append(processed_val)
+            if processed_val not in seen:
+                seen.add(processed_val)
+                processed_values.append(processed_val)
         args.values = processed_values
-
+        
     # Auto-detect suffix if not specified
     if not args.suffix:
         suffix_map = {
