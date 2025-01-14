@@ -759,7 +759,7 @@ if __name__ == "__main__":
                         help='Parameter to test (default: %(default)s)')
     parser.add_argument('--values', nargs='+', 
                         help='Values for test parameter. Can be numbers or strings. If not specified, will test with/without the test-arg')
-    parser.add_argument('--quality', nargs='+', type=int, 
+    parser.add_argument('--quality', nargs='+', type=float, 
                         default=[24, 27, 30, 33, 36],
                         help='Quality (CRF) values to test (default: %(default)s)')
     parser.add_argument('--workspace', default='',
